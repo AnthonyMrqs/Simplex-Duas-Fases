@@ -1,20 +1,4 @@
 import numpy as np
-from sympy.interactive import printing
-from sympy import Rational, Matrix, Eq, Symbol
-from IPython.display import display
-
-printing.init_printing()
-
-def to_fractions(matrix): # Converte uma matriz em frações
-    # Converte a matriz para frações
-    fractions_matrix = np.array(Matrix(matrix).applyfunc(lambda x: Rational(x).limit_denominator()))
-    
-    # Verifica se é um vetor (matriz com uma única coluna ou linha)
-    if fractions_matrix.shape[0] == 1 or fractions_matrix.shape[1] == 1:
-        return Matrix(fractions_matrix.T)  # Retorna como vetor unidimensional
-    else:
-        return Matrix(fractions_matrix)  # Retorna no formato de matriz
-
 
 def add_var(n, A, idxs = None): # Função para adicionar as variáveis de folga
     identity = np.identity(n) # Cria a matriz identidade
@@ -128,20 +112,16 @@ def collect_indexes(t): # Coleta os índices das variáveis básicas e não bás
     return ctb, ctn
 
 
-def two_phase(tableau, b, cfs1, show): # Função responsável por realizar o método de duas fases
+def two_phase(tableau, b, cfs1): # Função responsável por realizar o método de duas fases
     dim = len(tableau)
     cfs2 = np.append(np.zeros(len(cfs1)), [-1]*dim) # Adiciona yn aos coeficientes e zera os coeficientes anteriores
     
-    A = algorithm_simplex(tableau, b, cfs2, show) 
+    A = algorithm_simplex(tableau, b, cfs2) 
     return A
 
 
-def algorithm_simplex(A, b, cfs, show): # Função responsável por realizar o algoritimo simplex
+def algorithm_simplex(A, b, cfs): # Função responsável por realizar o algoritimo simplex
     A = check_base(A) # Escalona a matriz caso a base esteja implícita
-
-    if show:
-        print("Temos o tableau inicial:")
-        display(to_fractions(A))
         
     # Realiza um laço infinito até a solução ótima for achada ou o problema for ilimitado
     while True:   
@@ -153,23 +133,12 @@ def algorithm_simplex(A, b, cfs, show): # Função responsável por realizar o a
         ctb = [cfs[i] for i in i_ctb]
         ctn = [cfs[j] for j in i_ctn]
 
-        if show:
-            print("="*100)
-            display(Eq(Symbol("c_b^t"), to_fractions(ctb), evaluate=False))
-            display(Eq(Symbol("c_n^t"), to_fractions(ctn), evaluate=False))
-
         # Operações para achar o vetor dos coeficientes de custo reduzido
         z = ctb @ An
         r = ctn - z
-        
-        if show:
-            display(Eq(Symbol("z"), to_fractions(z), evaluate=False))
-            display(Eq(Symbol("r"), to_fractions(r), evaluate=False))
 
         # Confere se o vetor de custo está dentro das condições para solução ser ótima
         if not np.all(r == 0) and np.all(r <= 0):
-            if show:
-                print("Achamos a solução ótima!\n")
             return A
         
         # Usa a regra proposta por George Dantzig (usar o maior coeficiente de custo) para sabe qual variável q da matriz An irá entrar na base e armazena a coluna q
@@ -177,14 +146,7 @@ def algorithm_simplex(A, b, cfs, show): # Função responsável por realizar o a
         vector_q =  An.T[q]
 
         # Calcula o indíce de variável que irá sair da base
-        p = argmin(b, vector_q)
-
-        if show:
-            print(f"Entraremos com a {q+1}ª variavel na matriz:")
-            display(Eq(Symbol("A_n"), to_fractions(An), evaluate=False))  
-        
-            print(f"Temos que,") 
-            display(Eq(Symbol("p"), Symbol("Indeterminado") if p == None else p+1, evaluate=False))             
+        p = argmin(b, vector_q)      
 
         # Caso o p seja vazio, o problema é ilimitado
         if p == None:
@@ -194,12 +156,8 @@ def algorithm_simplex(A, b, cfs, show): # Função responsável por realizar o a
         # Troca a base de acordo com os indíces p e q
         A = scaling(A, (p, i_ctn[q]))
 
-        if show:
-            print(f"Temos o tableau final:")
-            display(to_fractions(A))
 
-
-def solutions(A, f, show = None): # Função para expor a solução do PPL
+def solutions(A, f): # Função para expor a solução do PPL
     sols = A[:, -1] # Coleta a ultima coluna da matriz (soluções)
 
     x_values = np.zeros(len(A[0]) - 1) # Inicializa uma matriz de 0's do tamanho das soluções 
@@ -213,16 +171,11 @@ def solutions(A, f, show = None): # Função para expor a solução do PPL
 
     x_values = x_values[:len(f)] # Ignora as variáveis de folga e coleta apenas as soluções das variáveis da função objetivo
     result = sum(x_values[i]*e for i, e in enumerate(f)) # Calcula a solução ótima
-
-    if show:
-        print("O valor ótimo é:") 
-        display(Rational(result).limit_denominator())
-        display(Eq(Symbol("X"), to_fractions(x_values), evaluate = False))
     
     return x_values, result
 
 
-def simplex(A, b, c, eq = None, show = None): # Função que realiza a preparação do tableau para as operações do algoritimo
+def simplex(A, b, c, eq = None): # Função que realiza a preparação do tableau para as operações do algoritimo
     n = len(A)
     idx = [i for i in range(len(b)) if b[i] < 0] # Lista de índices que tem a desigualdade >=
     b = np.abs(b) # Aplicao o valor absoluto em todos os elementos da coluna b
@@ -244,32 +197,25 @@ def simplex(A, b, c, eq = None, show = None): # Função que realiza a preparaç
 
     # Caso o problema apresente desigualdade inversas, será realizado o simplex de duas fases
     if idx:
-        tableau = two_phase(tableau, b, coeficientes, show) # Tableau final do método duas fases
+        tableau = two_phase(tableau, b, coeficientes) # Tableau final do método duas fases
 
         if np.any(tableau == None):
             return 
         
         tableau = np.concatenate((tableau[:, :coeficientes.shape[0]], tableau[:, -1:]), axis=1) # Retira as colunas y's do tableau
 
-        if show:
-            print("="*100)
     
     # Realiza o simplex para resolver o PPL
-    result = algorithm_simplex(tableau, b, coeficientes, show)
+    result = algorithm_simplex(tableau, b, coeficientes)
     
     # Confere se o programa achou a solução e expõe a solução
     if np.any(result != None):
-        return solutions(result, c, show)
+        return solutions(result, c)
 
 
-c = np.array([1, 2])
-A = np.array([
-            [1, 1],
-            [1, 1/2]
-            ]) 
+c = np.array([])
+A = np.array([]) 
 
-b = np.array([-1,
-               1])
+b = np.array([])
 
-res = simplex(A, b, c)
-print(res[0])
+res = simplex(A, b, c) # Tupla de valores (valores de x, aplicação na função objetivo)
